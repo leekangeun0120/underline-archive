@@ -1,0 +1,17 @@
+{
+  "name": "밑줄 아카이브",
+  "short_name": "밑줄",
+  "description": "보고 배운 것들을 분야별로 정리하는 유튜브 기록 서재",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F5F4EE",
+  "theme_color": "#F5F4EE",
+  "lang": "ko",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

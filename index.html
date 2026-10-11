@@ -1,0 +1,1316 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#F5F4EE">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="밑줄">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<title>밑줄 아카이브 — 분야별 영상 기록</title>
+<!--
+  [클로드 작업 메모]
+  이 파일은 설치형 웹앱(PWA)입니다. 폰에서는 브라우저 저장소(localStorage)에 자동 저장돼요.
+  DATA START ~ DATA END 사이는 "처음 배포용 시드 데이터"입니다.
+   - 새 카드를 사용자에게 줄 때: 아래 스키마의 JSON(카드 배열 또는 {categories,videos})을 만들어 주면
+     사용자가 앱 하단 "⚙ 백업 · 가져오기"에서 붙여넣어 추가합니다. (같은 id는 덮어쓰기)
+   - 시드를 직접 고칠 때: 이 파일의 DATA.videos에 추가하고 다시 배포 (사용자가 지운 id는 시드에서 되살아나지 않음)
+  스키마: { id(유튜브ID), title, channel, category(DATA.categories의 name과 일치), videoDate("YYYY.MM.DD"),
+           addedAt, summary, epNum(선택), titleNote(선택),
+           timeline:[{time,title,note}], insights:[문자열] }
+  새 분야는 DATA.categories에 {name, color} 추가 (가져오기 시 자동 생성도 됨).
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F5F4EE;
+    --card:#FFFFFF;
+    --ink:#22301F;
+    --ink-soft:#5A6653;
+    --line:#D9D8CC;
+    --highlight:#F9E25A;
+    --highlight-soft:#FCF3B8;
+    --accent:#3E5C3A;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'IBM Plex Sans KR',sans-serif;
+    line-height:1.65;
+    min-height:100vh;
+  }
+  .wrap{max-width:720px;margin:0 auto;padding:28px 18px 100px}
+
+  header{margin-bottom:22px}
+  .eyebrow{font-size:12px;letter-spacing:.18em;color:var(--ink-soft);text-transform:uppercase;margin-bottom:10px}
+  h1{font-family:'Gowun Batang',serif;font-size:clamp(28px,7vw,40px);font-weight:700;line-height:1.25}
+  h1 .hl{background:linear-gradient(transparent 62%, var(--highlight) 62%);padding:0 2px}
+  .sub{color:var(--ink-soft);font-size:14px;margin-top:10px}
+
+  .toolbar{
+    margin-top:18px;padding-top:14px;border-top:1px solid var(--line);
+  }
+  .search-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .search-row input[type=text]{
+    flex:1;min-width:180px;
+    border:1px solid var(--line);border-radius:8px;
+    padding:8px 11px;font-size:14px;font-family:inherit;background:#FDFDFB;color:var(--ink);
+  }
+  .search-row input:focus{outline:2px solid var(--accent);outline-offset:1px}
+  .sort-label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-soft)}
+  .sort-label select{
+    font-family:inherit;font-size:13px;color:var(--ink);
+    border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:#FDFDFB;
+  }
+  .sort-label select:focus{outline:2px solid var(--accent);outline-offset:1px}
+
+  .cat-chips{
+    display:flex;gap:8px;margin-top:14px;
+    overflow-x:auto;padding-bottom:6px;
+    -webkit-overflow-scrolling:touch;
+  }
+  .cat-chips::-webkit-scrollbar{height:4px}
+  .cat-chips::-webkit-scrollbar-thumb{background:var(--line);border-radius:2px}
+  .chip{
+    flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;
+    background:#FDFDFB;border:1px solid var(--line);border-radius:20px;
+    font-family:inherit;font-size:13px;font-weight:500;color:var(--ink-soft);
+    padding:7px 14px;cursor:pointer;white-space:nowrap;
+  }
+  .chip .dot{width:8px;height:8px;border-radius:50%;background:var(--ink-soft)}
+  .chip .cnt{font-size:11px;opacity:.75}
+  .chip.active{color:#fff;border-color:transparent}
+  .chip.active .dot{background:rgba(255,255,255,.85)}
+  .count-line{font-size:13px;color:var(--ink-soft);margin-top:12px}
+
+  .add-box{
+    background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:16px 18px;margin:22px 0 26px;
+  }
+  .add-toggle{
+    width:100%;background:none;border:none;text-align:left;
+    font-family:'Gowun Batang',serif;font-size:16px;font-weight:700;color:var(--ink);
+    cursor:pointer;padding:2px 0;
+  }
+  .add-form{display:none;margin-top:16px}
+  .add-form.open{display:block}
+  .add-form label{
+    display:block;font-size:12px;font-weight:700;color:var(--ink-soft);
+    margin:14px 0 6px;
+  }
+  .add-form label:first-child{margin-top:0}
+  .add-form label.ins-label{margin-top:20px}
+  .add-form input[type=text],.add-form textarea,.add-form select{
+    width:100%;border:1px solid var(--line);border-radius:8px;
+    padding:9px 11px;font-size:14px;font-family:inherit;background:#FDFDFB;color:var(--ink);
+  }
+  .add-form textarea{resize:vertical}
+  .add-form input:focus,.add-form textarea:focus,.add-form select:focus{outline:2px solid var(--accent);outline-offset:1px}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media (max-width:480px){.two-col{grid-template-columns:1fr}}
+  #newCatWrap{display:none;margin-top:8px}
+  #newCatWrap.show{display:block}
+  .tl-row{
+    display:grid;grid-template-columns:70px 1fr;gap:8px;margin-bottom:8px;
+    border-left:2px solid var(--line);padding-left:10px;
+  }
+  .tl-row input{font-size:13px;padding:7px 9px}
+  .tl-row .tl-fields{display:flex;flex-direction:column;gap:6px}
+  .row-remove{
+    background:none;border:none;color:var(--ink-soft);font-size:12px;
+    cursor:pointer;text-decoration:underline;padding:2px 0;text-align:left;
+  }
+  .ins-row{display:flex;gap:8px;margin-bottom:8px;align-items:center}
+  .ins-row input{flex:1}
+  .add-row-btn{
+    background:none;border:1px dashed var(--line);border-radius:8px;
+    font-family:inherit;font-size:12px;color:var(--accent);font-weight:700;
+    padding:8px 12px;cursor:pointer;width:100%;margin-top:2px;
+  }
+  .btn-submit{
+    display:block;width:100%;background:var(--accent);color:#fff;border:none;
+    border-radius:8px;padding:12px;font-size:15px;font-weight:700;font-family:inherit;
+    cursor:pointer;margin-top:20px;
+  }
+  .form-status{font-size:13px;color:var(--ink-soft);margin-top:10px;text-align:center}
+  .form-status.err{color:#A24936}
+  .cancel-edit-btn{
+    display:block;width:100%;background:none;border:1px solid var(--line);
+    border-radius:8px;padding:10px;font-size:13px;color:var(--ink-soft);
+    font-family:inherit;cursor:pointer;margin-top:8px;
+  }
+
+  .video-card{
+    background:var(--card);border:1px solid var(--line);border-radius:14px;
+    overflow:hidden;margin-bottom:18px;
+    border-top:4px solid var(--accent);
+  }
+  .card-body{padding:18px 18px 18px}
+  .cat-badge{
+    display:inline-block;color:#fff;
+    font-size:11px;font-weight:700;letter-spacing:.02em;
+    padding:2px 9px;border-radius:20px;margin-bottom:8px;margin-right:6px;
+  }
+  .card-title{font-family:'Gowun Batang',serif;font-size:18px;font-weight:700;line-height:1.4}
+  .ep-badge{
+    display:inline-block;background:var(--highlight);color:var(--ink);
+    font-family:'IBM Plex Sans KR',sans-serif;font-size:12px;font-weight:700;
+    padding:2px 7px;border-radius:5px;vertical-align:middle;margin-right:2px;
+  }
+  .card-title a{color:var(--ink);text-decoration:none}
+  .card-title a:hover{text-decoration:underline}
+  .card-meta{font-size:12px;color:var(--ink-soft);margin-top:6px}
+  .card-meta .channel{font-weight:700}
+  .card-summary{font-size:14px;margin-top:12px;border-left:3px solid var(--highlight);padding-left:10px}
+  .card-btns{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+  .card-manage{
+    display:flex;gap:8px;margin-top:20px;padding-top:14px;
+    border-top:1px dashed var(--line);
+  }
+  .manage-btn{
+    background:none;border:1px solid var(--line);border-radius:8px;
+    font-family:inherit;font-size:12px;color:var(--ink-soft);font-weight:500;
+    padding:7px 12px;cursor:pointer;
+  }
+  .manage-btn:hover{color:var(--accent);border-color:var(--accent)}
+  .manage-btn.danger:hover{color:#A24936;border-color:#A24936}
+  .watch-btn{
+    display:inline-flex;align-items:center;
+    background:var(--accent);color:#fff;text-decoration:none;
+    font-size:13px;font-weight:700;padding:8px 14px;border-radius:8px;
+  }
+  .watch-btn:hover{opacity:.9}
+  .expand-btn{
+    background:none;border:1px solid var(--line);border-radius:8px;
+    font-family:inherit;font-size:13px;font-weight:500;color:var(--accent);
+    padding:8px 14px;cursor:pointer;
+  }
+  .detail{display:none;margin-top:18px}
+  .detail.open{display:block}
+  .section-label{font-size:12px;letter-spacing:.14em;color:var(--ink-soft);margin:18px 0 10px;font-weight:700}
+
+  .timeline{list-style:none;border-left:2px solid var(--line);padding-left:16px}
+  .timeline li{position:relative;padding-bottom:14px}
+  .timeline li::before{
+    content:"";position:absolute;left:-21px;top:7px;
+    width:8px;height:8px;border-radius:50%;background:var(--accent);
+  }
+  .tl-time{font-size:12px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums}
+  .tl-time a{color:var(--accent);text-decoration:none}
+  .tl-time a:hover{text-decoration:underline}
+  .tl-title{font-size:14px;font-weight:700;margin-top:1px}
+  .tl-note{font-size:13px;color:var(--ink-soft);margin-top:2px}
+
+  .insights{list-style:none}
+  .insights li{font-size:14px;margin-bottom:10px;padding-left:22px;position:relative}
+  .insights li::before{content:"✦";position:absolute;left:2px;color:var(--accent);font-size:12px;top:2px}
+  .insights li .hl{background:linear-gradient(transparent 60%, var(--highlight-soft) 60%)}
+
+  .empty-msg{
+    text-align:center;color:var(--ink-soft);font-size:14px;
+    padding:40px 0;border:1px dashed var(--line);border-radius:14px;background:#FBFAF5;
+  }
+
+  .save-bar{
+    position:fixed;left:0;right:0;bottom:0;
+    background:var(--ink);color:#fff;
+    padding:14px 18px;display:none;align-items:center;justify-content:center;
+    gap:14px;flex-wrap:wrap;font-size:13px;z-index:50;
+    box-shadow:0 -4px 16px rgba(0,0,0,.15);
+  }
+  .save-bar.show{display:flex}
+  .save-bar button{
+    background:var(--highlight);color:var(--ink);border:none;border-radius:8px;
+    font-family:inherit;font-weight:700;font-size:13px;padding:8px 16px;cursor:pointer;
+  }
+
+  /* ===== 앱 모드 보정 ===== */
+  html{-webkit-tap-highlight-color:transparent}
+  body{padding-bottom:env(safe-area-inset-bottom);overscroll-behavior-y:none}
+  .wrap{padding-top:calc(28px + env(safe-area-inset-top));padding-left:max(18px,env(safe-area-inset-left));padding-right:max(18px,env(safe-area-inset-right));padding-bottom:calc(80px + env(safe-area-inset-bottom))}
+  button,.chip,.watch-btn,.expand-btn,.manage-btn{touch-action:manipulation}
+  .manage-btn,.expand-btn,.watch-btn{min-height:40px}
+  @media (max-width:720px){
+    input[type=text],textarea,select{font-size:16px !important}
+  }
+
+  .install-banner{
+    display:none;background:var(--highlight-soft);border:1px solid var(--highlight);
+    border-radius:12px;padding:12px 14px;margin:0 0 18px;font-size:13px;line-height:1.55;
+  }
+  .install-banner b{font-weight:700}
+  .install-banner .ib-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .install-banner button{
+    font-family:inherit;font-size:13px;font-weight:700;border-radius:8px;padding:8px 14px;cursor:pointer;
+    border:1px solid var(--accent);background:var(--accent);color:#fff;min-height:40px;
+  }
+  .install-banner button.ghost{background:none;color:var(--ink-soft);border-color:var(--line)}
+
+  .admin-box{
+    background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:16px 18px;margin-top:34px;
+  }
+  .admin-body{display:none;margin-top:14px}
+  .admin-body.open{display:block}
+  .admin-desc{font-size:13px;color:var(--ink-soft);margin-bottom:14px}
+  .admin-body label{display:block;font-size:12px;font-weight:700;color:var(--ink-soft);margin:16px 0 6px}
+  .admin-body textarea{
+    width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 11px;
+    font-family:inherit;font-size:14px;background:#FDFDFB;color:var(--ink);resize:vertical;
+  }
+  .admin-body input[type=file]{font-size:13px;max-width:100%}
+  .btn-row{display:flex;gap:8px;flex-wrap:wrap}
+  .btn-sm{
+    font-family:inherit;font-size:13px;font-weight:700;color:var(--accent);
+    background:none;border:1px solid var(--accent);border-radius:8px;padding:9px 14px;cursor:pointer;min-height:40px;
+  }
+  .btn-sm.primary{background:var(--accent);color:#fff;margin-top:8px}
+  .admin-note{font-size:12px;color:var(--ink-soft);margin-top:14px}
+
+  .toast{
+    position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));
+    transform:translate(-50%,20px);opacity:0;pointer-events:none;
+    background:var(--ink);color:#fff;font-size:13px;padding:10px 16px;border-radius:20px;
+    max-width:86vw;text-align:center;transition:opacity .2s, transform .2s;z-index:80;
+  }
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="install-banner" id="installBanner">
+    <div id="installText"></div>
+    <div class="ib-row" id="installBtns"></div>
+  </div>
+  <header>
+    <div class="eyebrow">UNDERLINE ARCHIVE</div>
+    <h1>보고 배운 것들, <span class="hl">밑줄 그으며</span> 모아두기</h1>
+    <p class="sub">유튜브 영상을 분야별로 정리하는 나만의 서재. 채널이 무엇이든, 타임라인과 인사이트를 남겨둡니다.</p>
+
+    <div class="toolbar">
+      <div class="search-row">
+        <input type="text" id="searchInput" placeholder="제목 · 요약 · 인사이트 검색" oninput="render()">
+        <label class="sort-label">정렬:
+          <select id="sortSelect" onchange="render()">
+            <option value="date_desc" selected>영상 게시일 · 최신순</option>
+            <option value="date_asc">영상 게시일 · 오래된순</option>
+            <option value="added">추가한 순서</option>
+          </select>
+        </label>
+      </div>
+      <div class="cat-chips" id="catChips"></div>
+      <div class="count-line" id="countText"></div>
+    </div>
+  </header>
+
+  <div class="add-box" id="addBox">
+    <button class="add-toggle" id="addToggleBtn" type="button" onclick="toggleAddForm()">＋ 새 영상 추가하기</button>
+    <div class="add-form" id="addForm">
+      <label>영상 제목</label>
+      <input type="text" id="f-title" placeholder="예: 진짜 시스템은 이렇게 만들어져요">
+
+      <div class="two-col">
+        <div>
+          <label>유튜브 링크</label>
+          <input type="text" id="f-url" placeholder="https://www.youtube.com/watch?v=...">
+        </div>
+        <div>
+          <label>게시일</label>
+          <input type="text" id="f-date" placeholder="2026.07.10">
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div>
+          <label>채널 이름</label>
+          <input type="text" id="f-channel" placeholder="예: 소울정, 삼프로TV...">
+        </div>
+        <div>
+          <label>분야</label>
+          <select id="f-cat" onchange="onCatSelect()"></select>
+          <div id="newCatWrap">
+            <input type="text" id="f-newcat" placeholder="새 분야 이름 (예: 요리, 여행)">
+          </div>
+        </div>
+      </div>
+
+      <label>한줄 요약 (2문장 정도)</label>
+      <textarea id="f-summary" rows="2" placeholder="영상 전체를 짧게 요약해주세요"></textarea>
+
+      <label>타임라인</label>
+      <div id="tl-rows"></div>
+      <button class="add-row-btn" type="button" onclick="addTlRow()">+ 타임라인 구간 추가</button>
+
+      <label class="ins-label">인사이트</label>
+      <div id="ins-rows"></div>
+      <button class="add-row-btn" type="button" onclick="addInsRow()">+ 인사이트 추가</button>
+
+      <button class="btn-submit" id="submitBtn" type="button" onclick="submitVideo()">이 영상 목록에 추가</button>
+      <button class="cancel-edit-btn" id="cancelEditBtn" type="button" onclick="cancelEdit()" style="display:none">수정 취소</button>
+      <div class="form-status" id="formStatus"></div>
+    </div>
+  </div>
+
+  <div id="videoList"></div>
+
+  <section class="admin-box" id="adminBox">
+    <button class="add-toggle" id="adminToggle" type="button" onclick="toggleAdmin()">⚙ 백업 · 가져오기</button>
+    <div class="admin-body" id="adminBody">
+      <p class="admin-desc">기록은 이 기기의 앱 안에 자동 저장돼요. 폰을 바꾸거나 앱을 지우기 전에는 꼭 백업해두세요.</p>
+      <div class="btn-row">
+        <button class="btn-sm" type="button" onclick="exportBackup()">백업 파일 저장</button>
+        <button class="btn-sm" type="button" onclick="copyBackup()">클립보드로 복사</button>
+      </div>
+
+      <label for="importText">카드 / 백업 JSON 붙여넣기</label>
+      <textarea id="importText" rows="5" placeholder="클로드가 만들어준 카드 JSON이나 백업 내용을 붙여넣으세요"></textarea>
+      <button class="btn-sm primary" type="button" onclick="importFromText()">붙여넣은 내용 가져오기</button>
+
+      <label for="importFile">또는 백업 파일 선택</label>
+      <input type="file" id="importFile" accept=".json,application/json" onchange="importFromFile(this)">
+
+      <p class="admin-note">같은 영상(id)이 이미 있으면 새 내용으로 덮어써요.</p>
+    </div>
+  </section>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== DATA START =====
+var DATA = {
+  "categories": [
+    {
+      "name": "자기계발",
+      "color": "#3E5C3A"
+    },
+    {
+      "name": "경제·재테크",
+      "color": "#8A6D2F"
+    },
+    {
+      "name": "책·독서",
+      "color": "#5B4A68"
+    },
+    {
+      "name": "커리어·일",
+      "color": "#35566B"
+    },
+    {
+      "name": "건강·루틴",
+      "color": "#2F6B5E"
+    }
+  ],
+  "videos": [
+    {
+      "id": "az3RmsPeVT0",
+      "title": "써먹지 못하는 인문학은 인문학이 아니다 | 윤소정 인재양성소 인큐 대표 | 세바시 639회",
+      "channel": "세바시 강연",
+      "category": "자기계발",
+      "videoDate": "2016.03.01",
+      "addedAt": "2026.07.11",
+      "summary": "책 집필을 앞두고 벼락치기 습관을 극복하려 유럽까지 떠났지만 결국 한 글자도 못 썼던 '공부 디톡스' 실패담에서 출발한 강연. 미생 윤태호 작가의 '명상록' 일화를 계기로 '알고 있다'와 '삶으로 알고 있다'의 차이를 깨닫고, 인문학(人文學)을 문인학이 아닌 진짜 사람 공부로 되찾아온 자신만의 인문법을 풀어낸다.",
+      "timeline": [
+        {
+          "time": "0:24",
+          "title": "\"많이 아는 게 문제다\" — 공부 디톡스 선언",
+          "note": "음식처럼 지식도 과하면 독이 된다는 문제의식에서 출발."
+        },
+        {
+          "time": "0:59",
+          "title": "파워블로거의 자만, 그리고 벼락치기 체질",
+          "note": "일주일 만에 파워블로거가 될 만큼 글을 잘 쓴다고 믿었지만, 장기전인 책 집필 앞에서는 영감이 오지 않음."
+        },
+        {
+          "time": "1:47",
+          "title": "남편 핑계, 그리고 별거 신청",
+          "note": "밤마다 TV를 보자는 남편 때문에 글이 안 써진다며 별거를 신청, 남편이 자비로 방까지 잡아줌."
+        },
+        {
+          "time": "2:27",
+          "title": "혼자 방을 잡아도 안 써지던 글",
+          "note": "탈고까지 6개월 남았을 때는 여전히 안 써졌다는 자각 — 문제는 환경이 아니었다는 복선."
+        },
+        {
+          "time": "3:34",
+          "title": "짤쯔부르크로 떠나다",
+          "note": "'사운드 오브 뮤직' 속 마리아 선생님을 동경하며 오스트리아까지 갔지만, 노트북을 펴는 순간 다시 안 써짐."
+        },
+        {
+          "time": "4:24",
+          "title": "귀족 도서관을 통째로 빌려도 안 써진 글",
+          "note": "고서의 영감을 기대하며 몇백 년 된 도서관을 예약했지만, 글을 못 쓰는 자신을 다시 발견."
+        },
+        {
+          "time": "4:54",
+          "title": "미생 윤태호 작가의 '명상록' 인터뷰가 떠오르다",
+          "note": "\"바다에 가지 않고 바다를 느낄 수 없는 자는, 바다에 가서도 그 어떤 것도 느낄 수 없다\" — 문제는 장소가 아니라는 깨달음."
+        },
+        {
+          "time": "6:22",
+          "title": "\"나는 알고 있었던 게 아니라, 아무것도 모르고 있었다\"",
+          "note": "인터뷰를 듣고 '안다'고 착각했던 자신을 발견 — 윤태호 작가는 삶으로, 자신은 머리로만 채웠다는 자각."
+        },
+        {
+          "time": "6:52",
+          "title": "다 찢어버린 원고, 그리고 되짚어본 20대",
+          "note": "하루 5권씩, 누적 천 권 넘게 읽었지만 정작 써먹고 있는 것은 거의 없었다는 뼈아픈 자기 진단."
+        },
+        {
+          "time": "7:40",
+          "title": "노래의 대가들처럼 한 문장을 곱씹기",
+          "note": "가사 한 줄을 백 번 천 번 씹어 삼키듯, '피할 수 없으면 즐겨라'조차 한 번도 곱씹어본 적 없었다는 발견."
+        },
+        {
+          "time": "9:01",
+          "title": "인문학(人文學)이 아니라 문인학(文人學)을 하고 있었다",
+          "note": "인간을 공부해야 할 인문학을, 실제로는 글로만 공부하고 있었다는 언어유희적 통찰."
+        },
+        {
+          "time": "9:44",
+          "title": "키스를 책으로 배울 수 있는가",
+          "note": "인간 공부도 실전이 필요하다 — 인문학의 기본 정신인 '역지사지'는 글이 아니라 경험으로만 가능하다는 논리."
+        },
+        {
+          "time": "10:35",
+          "title": "가장 미운 사람으로 시작한 역지사지 훈련",
+          "note": "서로 상처 준 사람의 입장이 되어 매일 아침 그 사람 어투로 자신에게 편지를 쓰는 실험."
+        },
+        {
+          "time": "12:00",
+          "title": "욕하는 편지가 용서와 사랑으로 바뀌다",
+          "note": "처음엔 화가 났지만 점점 그 사람의 상황이 이해되고, 결국 인생 최고의 스승이 됨."
+        },
+        {
+          "time": "12:22",
+          "title": "\"가르치는 건 폭력이다\"",
+          "note": "가르침이 배움의 기회를 박탈한다는 역설 — 이후 '가르치지 않고 배움을 설계'하는 방향으로 전환."
+        },
+        {
+          "time": "12:57",
+          "title": "광화문에서 진행한 이순신 체험 수업",
+          "note": "돈과 소지품을 다 뺏고 종이와 펜만 준 뒤, 명량의 한 문장을 몸으로 겪게 하는 실전형 인문학 수업."
+        },
+        {
+          "time": "14:26",
+          "title": "\"행동해보지 않은 모든 것은 쓰레기다\"",
+          "note": "책과 독서모임을 섭렵했던 한 사람이, 단 한 번의 체험 수업 후 '주둥아리로 공부했다'고 고백한 순간."
+        }
+      ],
+      "insights": [
+        "많이 아는 것과 삶으로 알고 있는 것은 다르다 — 머리만 비대해지는 공부는 실제로는 아무것도 모르는 것과 같을 수 있다.",
+        "해결되지 않는 문제는 장소를 바꾼다고 풀리지 않는다 — 진짜 답은 문제가 있던 그 자리에서 끝까지 부딪혀야 나온다.",
+        "인문학(人文學)은 사람을 공부하는 학문이지, 글로 사람을 배우는 문인학(文人學)이 아니다 — 역지사지는 경험으로만 체득된다.",
+        "가장 미운 사람의 입장이 되어 그의 어투로 나에게 편지를 써보는 것은, 어떤 심리학 서적보다 강력한 역지사지 훈련이 될 수 있다.",
+        "가르치는 행위는 상대의 배움의 기회를 빼앗는 폭력일 수 있다 — 진짜 교육은 가르치는 것이 아니라 배움을 설계하는 것이다.",
+        "한 문장이라도 몸으로 직접 겪어보는 경험이, 수백 권의 책을 읽는 것보다 더 깊은 이해를 만든다.",
+        "행동해보지 않은 지식은 결국 쓰레기가 될 수 있다 — 곱씹고 실천하는 것만이 진짜 나의 것이 된다."
+      ]
+    },
+    {
+      "id": "-m03dyVDxcc",
+      "title": "누구에게나 비밀은 있다 | 윤소정 인큐 대표 | 세바시 406회",
+      "channel": "세바시 강연",
+      "category": "자기계발",
+      "videoDate": "2014.03.31",
+      "addedAt": "2026.07.11",
+      "summary": "리허설을 완전히 망친 뒤 준비했던 원고를 다 찢어버리고, 대본 없이 솔직하게 풀어낸 15분짜리 첫 대중 강연. 예쁜 척·있는 척·강한 척 세 가지 흑역사에서 시작해, 정신병을 앓던 아버지를 숨겨온 이야기, 그리고 상담해온 청년들을 변화시킨 '실용 지능'과 '새콤달콤 치유법'까지 두려움을 이기는 자신만의 방법을 고백한다.",
+      "timeline": [
+        {
+          "time": "0:23",
+          "title": "리허설 참패 후 원고를 다 찢다",
+          "note": "일주일 준비한 강연 원고가 하나도 공감이 안 돼 다 찢어버리고, 오늘은 그냥 솔직해지기로 결심."
+        },
+        {
+          "time": "1:21",
+          "title": "세 가지 흑역사, 공통점 찾기 게임",
+          "note": "예쁜 척 · 있는 척 · 강한 척 — 관객과 함께 공통점을 찾아가는 형식으로 이야기를 풀어냄."
+        },
+        {
+          "time": "2:03",
+          "title": "흑역사 ① 예쁜 척하다 잘릴 뻔한 첫 강의",
+          "note": "'못생긴 여자가 예쁜 척하는 걸 더 싫어한다'는 한 수강생의 문자 — 있는 그대로의 나를 보여주기로 결심한 계기."
+        },
+        {
+          "time": "3:06",
+          "title": "흑역사 ② 없는 척 — 밤엔 아르바이트, 낮엔 있는 척",
+          "note": "가난한 형편을 친구들에게 말하지 못해 밤엔 부품 조립 알바를 하며 낮엔 있는 척 어울렸던 대학 시절."
+        },
+        {
+          "time": "3:56",
+          "title": "흑역사 ③ 사랑받는 척, 강한 척",
+          "note": "'외로웠지'라는 남자친구의 말에 '나는 늘 사랑받았다'고 받아친 것처럼, 보고 싶다는 말도 하지 못했던 연애."
+        },
+        {
+          "time": "4:57",
+          "title": "하체비만 콤플렉스와 성형외과 견적 상담",
+          "note": "\"현대 의학으로도 불가능하다\"는 말에 오히려 웃음이 터지며, 숨겨온 콤플렉스를 마주하게 된 순간."
+        },
+        {
+          "time": "6:37",
+          "title": "\"소정이 다리는 비욘세 다리\" — 말하는 순간 두려움이 사라졌다",
+          "note": "예비 남편에게 계속 반복해서 말하며 콤플렉스를 오픈하자, 더 이상 그것이 두려움이 아니게 된 경험."
+        },
+        {
+          "time": "7:50",
+          "title": "비밀은 두려움을 극복해야 할 첫 번째 대상",
+          "note": "아버지 직업, 다니는 대학을 말 못 하는 친구들 관찰 — 스스로 부끄러워하는 것이 곧 감춰진 두려움이라는 통찰."
+        },
+        {
+          "time": "9:13",
+          "title": "자퇴생, 상담 자격증 없이 4천 명을 만난 인큐베이팅",
+          "note": "심리 상담 전공도 자격증도 없이, 4평 스터디룸에서 시작해 4년 만에 강남의 인재 양성소로 성장한 이야기."
+        },
+        {
+          "time": "10:46",
+          "title": "가족의 반대, 그리고 아버지의 허락",
+          "note": "'너의 삶은 우리 가족의 삶이기도 하다'는 어머니의 말 — 세바시 출연을 계기로 가족에게 양해를 구함."
+        },
+        {
+          "time": "11:36",
+          "title": "\"가리려고 할수록 삶이 무거워진다\" — 아버지의 말",
+          "note": "더 이상 뒤돌아보지 말고 앞으로 나아가라는 아버지의 말에서 느낀 사랑."
+        },
+        {
+          "time": "12:00",
+          "title": "열다섯 살, 아버지가 암이길 기도했던 이유",
+          "note": "정신병이라는 병명은 친구들에게 말할 수 없어서, 차라리 암이길 바랐던 어린 시절의 고백."
+        },
+        {
+          "time": "12:52",
+          "title": "정신병원에서 열린 생일 파티",
+          "note": "철창을 세 개 지나 도착한 병실에서 촛불을 켜준 아버지, 세 시간 뒤엔 친구들과 웃으며 생일 파티를 함."
+        },
+        {
+          "time": "13:51",
+          "title": "죽고 싶은 순간마다 악착같이 살았던 시간",
+          "note": "속마음을 말하지 못한 채 열심히 사는 모습만 보이자, 오히려 사람들이 닮고 싶어하며 찾아오기 시작함."
+        },
+        {
+          "time": "14:38",
+          "title": "상담해도 변하지 않던 사람들의 진짜 문제",
+          "note": "꿈과 희망을 이야기해도 안 변했던 이유 — 결국 이들도 말하지 못한 속을 썩이고 있었다는 발견."
+        },
+        {
+          "time": "15:46",
+          "title": "변화의 비밀 — 실용 지능(Practical Intelligence)",
+          "note": "부잣집 아이들이 더 성공하는 이유는 재산이 아니라, 원하는 것을 요구하고 협상하는 능력에 있다는 심리학 연구."
+        },
+        {
+          "time": "18:15",
+          "title": "새콤달콤 치유법",
+          "note": "작은 것부터 요구하는 연습 — 요구하고, 도움받고, 내 상태를 밝히고, 거절당해도 'soso'로 넘기는 4단계 훈련법."
+        }
+      ],
+      "insights": [
+        "완벽하게 짜인 원고보다, 준비가 무너진 순간 선택한 솔직함이 더 큰 공감을 만들 수 있다.",
+        "비밀은 내가 두려움을 극복해야 할 첫 번째 대상이다 — 말하지 못하는 것을 안에 담아두는 한 그것은 계속 두려움으로 남는다.",
+        "콤플렉스나 약점을 입 밖으로 꺼내는 순간, 그것은 더 이상 나를 지배하는 두려움이 아니게 된다.",
+        "성공을 가르는 것은 재산이나 기회가 아니라 '요구하고 협상하는 능력(실용 지능)'일 수 있다 — 이는 어릴 때부터의 경험으로 형성된다.",
+        "상담과 조언으로도 변하지 않던 사람들의 진짜 문제는 꿈의 부재가 아니라, 자신의 속마음을 말하지 못하고 혼자 삭이는 것이었다.",
+        "작은 요구를 해보고, 도움을 받아보고, 거절도 가볍게 넘기는 연습을 반복하는 것이 '있는 그대로의 나'를 인정하는 훈련이 된다.",
+        "숨기려 할수록 삶은 무거워진다 — 가리는 대신 가볍게 털어놓을 때 비로소 앞으로 나아갈 수 있다."
+      ]
+    },
+    {
+      "id": "9kaCasK6Aww",
+      "title": "16년 동안 일하며 알게된 '돈보다 더 중요한 것들' (윤소정)",
+      "channel": "김짠부 재테크",
+      "category": "자기계발",
+      "videoDate": "2023.06.10",
+      "addedAt": "2026.07.11",
+      "titleNote": "윤소정 부부 게스트 출연",
+      "summary": "김짠부 채널에 윤소정 부부가 출연해 술잔을 기울이며 나눈 야외 날것 대담. '월천·100억' 같은 숫자 썸네일에 동조하다 초심을 잃었던 호스트의 고백에서 출발해, 본성에 맞는 토양 찾기, 강함의 재정의, 3000년 올리브나무의 비유, 그리고 잘 되는 사람들의 두 가지 특징까지 이어진다.",
+      "timeline": [
+        {
+          "time": "0:41",
+          "title": "첫 야외 촬영, 남편과 함께하는 날것의 대화",
+          "note": "질문 리스트 없이, 평소 술자리·커피 자리에서 나누던 대화의 느낌을 그대로 살린 포맷."
+        },
+        {
+          "time": "1:59",
+          "title": "'대중에게 먹힐 것' 대신 단 한 명에게 필요한 이야기",
+          "note": "단 한 명이 봐도 괜찮으니 그 친구에게 진짜 필요한 이야기를 담자는 소정님의 첫 조언."
+        },
+        {
+          "time": "2:18",
+          "title": "\"그때 내가 너무 구려지는 거야\"",
+          "note": "유튜브 속 멋진 사람들의 '정답'들 사이에서 자기 초심이 흐려지던 경험 — 결과값 콘텐츠에 자극받던 시절."
+        },
+        {
+          "time": "2:52",
+          "title": "들뢰즈 — 나는 과거의 나와 지금의 나의 '차이' 속에 있다",
+          "note": "인큐(나를 공부하는 학교) 2만 명을 만나며 찾은 한 줄. 사람은 고정이 아니라 변화의 사이사이가 그 사람이다."
+        },
+        {
+          "time": "3:44",
+          "title": "동종업계끼리만 놀지 말 것",
+          "note": "유튜버는 유튜버끼리, 직장인은 직장인끼리 노는 함정 — 전혀 다른 시스템으로 일하는 사람을 계속 만나야 관점이 열린다."
+        },
+        {
+          "time": "4:13",
+          "title": "숫자 썸네일에 동조했던 시절의 자기 고백",
+          "note": "'월천 벌었다'류 콘텐츠만 보다가 사고의 확장이 멈추고, 중요한 시기에 지방 부동산만 알아보고 있었다는 자각."
+        },
+        {
+          "time": "4:42",
+          "title": "\"100억 부자\"는 진짜 목표가 아니었다",
+          "note": "인터뷰마다 멋있어 보여서 말했던 목표 — 남의 목표에 동조하며 살던 시간에 대한 반성."
+        },
+        {
+          "time": "5:15",
+          "title": "지혜란 '누구를 따를 것인가'를 고르는 것",
+          "note": "스스로 생각하라는 멘토도, 전문가에게 물으라는 멘토도 다 옳다 — 문제는 내 본성에 맞는 선생을 고르는 안목."
+        },
+        {
+          "time": "6:04",
+          "title": "본성을 무시하고 멋진 사람만 좇다가 인생을 쓴다",
+          "note": "돈 많은 사람의 말이 정답처럼 느껴지지만, 그대로 따라 한 사람들이 다 잘 되지는 않았다는 관찰."
+        },
+        {
+          "time": "6:27",
+          "title": "돈으로 삶의 레벨을 매기는 문화",
+          "note": "평생 아이들을 키우며 행복한 삶을 '레벨이 낮다'고 은근히 비하하는 분위기 — 모두가 사장·유튜버가 되면 우울함만 남는다."
+        },
+        {
+          "time": "7:14",
+          "title": "\"못 따라가면 나약한 것\"이라는 말의 함정",
+          "note": "그 말은 말하는 사람이 강해 보이기 위한 표현일 뿐, 실제 나약함과는 무관하다."
+        },
+        {
+          "time": "7:35",
+          "title": "강함의 재정의 — 오래오래 스스로 하는 것",
+          "note": "잠깐 강한 것은 강한 게 아니다. 본성을 매일 성실히 가꾸면 뿌리가 생기고, 그때 꽃과 열매는 자연히 따라온다."
+        },
+        {
+          "time": "7:56",
+          "title": "A흙·B흙·C흙 — 좋고 나쁜 토양은 없다",
+          "note": "99%는 처음에 잘못 심겨진다. A흙이 최고라는 가정에 자신을 욱여넣다 불행해진다 — 옮겨 심으며 내 땅을 찾는 게 인생."
+        },
+        {
+          "time": "8:56",
+          "title": "팬더와 개미의 비유",
+          "note": "독립형(팬더)과 협력형(개미)은 필요한 선생이 다르다. 팬더가 목소리가 클 뿐, 확률적으로 개미가 더 많을 수 있다."
+        },
+        {
+          "time": "9:48",
+          "title": "\"무엇이 되지 않아도 괜찮은 어른이고 싶다\"",
+          "note": "16년 일한 끝의 자기소개 — 인정받지 못하고 죽어도 오늘을 사랑했다면 괜찮다고 말할 수 있는 삶."
+        },
+        {
+          "time": "10:23",
+          "title": "순진하지 말고 순수할 것",
+          "note": "잘 되지 않는 날에도 무너지지 않는 선택 — 눈빛을 잃지 않는 결정들만 하겠다는 다짐."
+        },
+        {
+          "time": "10:59",
+          "title": "3000년 올리브나무 편지",
+          "note": "쉬었다 피기를 반복하며 속을 비워낸 나무 — 비워내고 비워낸 그릇이어야 오래갈 수 있다는 비유."
+        },
+        {
+          "time": "12:02",
+          "title": "14년을 함께 일할 수 있었던 이유",
+          "note": "내가 죽을 만큼 힘들 때 옆 사람에게 힘이 있었고, 그 반대도 있었다 — 서로 끌어주며 온 시간."
+        },
+        {
+          "time": "13:07",
+          "title": "잘 된 사람들의 두 가지 특징",
+          "note": "① 밝음 ② '도와주고 싶다'는 마음이 드는 사람 — 긴 시간 지켜본 이들의 공통점."
+        },
+        {
+          "time": "13:27",
+          "title": "가치의 가치의 시대 — \"너는 응원단장이야\"",
+          "note": "'이거 너무 맛있는데 너도 먹어볼래'라는 진심에서 성장이 시작된다 — 호스트에게 건네는 마지막 정의."
+        }
+      ],
+      "insights": [
+        "지혜란 정답을 찾는 것이 아니라, 수많은 옳은 조언 중 '내 본성에 맞는 누구를 따를 것인가'를 고르는 것이다.",
+        "좋은 흙과 나쁜 흙은 없다 — A흙이 최고라는 가정에 자신을 욱여넣기보다, 옮겨 심으며 내 토양을 찾아가는 과정 자체가 인생이다.",
+        "강함은 잠깐의 성과가 아니라 자기 본성을 매일 성실하게 가꿔 뿌리를 만드는 것이다 — 뿌리가 생기면 꽃과 열매는 자연히 따라온다.",
+        "돈으로 삶의 레벨을 매기는 문화는 오늘을 성실히 가꾸는 수많은 삶을 은근히 비하한다 — 그런 삶에 박수 치는 콘텐츠가 더 많아져야 한다.",
+        "사람은 고정된 존재가 아니라 어제의 나와 오늘의 나의 '차이' 속에 있다 — 그 사이를 보기 시작하면 사람을 보는 관점이 달라진다.",
+        "오래가는 사람은 채우는 사람이 아니라 비워내는 사람이다 — 3000년 올리브나무처럼 쉬고 비우기를 반복해야 오래 열매 맺는다.",
+        "잘 된 사람들의 공통점은 스펙이 아니라 태도였다 — 밝음, 그리고 곁에서 도와주고 싶어지는 사람이라는 것."
+      ]
+    }
+  ]
+};
+// ===== DATA END =====
+
+// 새 분야 자동 배정용 색상 풀
+var COLOR_POOL = ["#3E5C3A","#8A6D2F","#5B4A68","#35566B","#2F6B5E","#A24936","#6B4F3A","#7A3B57","#4A5A78","#5F6B2F"];
+
+var currentCat = 'all';
+
+// ===== 기기 내부 저장 (localStorage) =====
+var STORE_KEY = 'underline-archive-v1';
+var SEED = DATA;          // 파일에 내장된 시드 데이터
+var DELETED = [];         // 사용자가 지운 시드 영상 id (되살아나지 않게)
+
+function loadStore(){
+  try{
+    var raw = localStorage.getItem(STORE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){ return null; }
+}
+function saveStore(){
+  try{
+    localStorage.setItem(STORE_KEY, JSON.stringify({
+      categories: DATA.categories, videos: DATA.videos, deleted: DELETED
+    }));
+    return true;
+  }catch(e){
+    toast('저장 공간에 문제가 있어요. 백업 파일을 꼭 저장해주세요.');
+    return false;
+  }
+}
+(function initData(){
+  var st = loadStore();
+  if(!st){ DATA = { categories: SEED.categories.slice(), videos: SEED.videos.slice() }; return; }
+  DATA = { categories: st.categories || [], videos: st.videos || [] };
+  DELETED = st.deleted || [];
+  // 시드에 새로 생긴 분야·영상만 합치기
+  SEED.categories.forEach(function(c){
+    if(!DATA.categories.some(function(x){ return x.name === c.name; })) DATA.categories.push(c);
+  });
+  SEED.videos.forEach(function(v){
+    var has = DATA.videos.some(function(x){ return x.id === v.id; });
+    if(!has && DELETED.indexOf(v.id) === -1) DATA.videos.push(v);
+  });
+})();
+
+var toastTimer = null;
+function toast(msg){
+  var el = document.getElementById('toast');
+  if(!el) return;
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ el.classList.remove('show'); }, 2600);
+}
+
+// ===== 유틸 =====
+function tsToSeconds(ts){
+  var parts = ts.split(':').map(Number);
+  for(var i=0;i<parts.length;i++){ if(isNaN(parts[i])) return null; }
+  return parts.reduce(function(acc,v){ return acc*60+v; }, 0);
+}
+function esc(s){
+  return String(s==null?'':s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+function parseDateVal(str){
+  if(!str) return 0;
+  var m = String(str).match(/(\d{4})(?:[.\-\/](\d{1,2}))?(?:[.\-\/](\d{1,2}))?/);
+  if(!m) return 0;
+  var y = Number(m[1]);
+  var mo = m[2] ? Number(m[2]) : 1;
+  var d = m[3] ? Number(m[3]) : 1;
+  return y*10000 + mo*100 + d;
+}
+function catColor(name){
+  var c = DATA.categories.find(function(x){ return x.name === name; });
+  return c ? c.color : '#5A6653';
+}
+function nextColor(){
+  var used = DATA.categories.map(function(c){ return c.color; });
+  for(var i=0;i<COLOR_POOL.length;i++){
+    if(used.indexOf(COLOR_POOL[i]) === -1) return COLOR_POOL[i];
+  }
+  return COLOR_POOL[DATA.categories.length % COLOR_POOL.length];
+}
+
+// ===== 분야 칩 =====
+function renderChips(){
+  var box = document.getElementById('catChips');
+  var html = '';
+  var total = DATA.videos.length;
+  html += chipHtml('all', '전체', null, total);
+  DATA.categories.forEach(function(c){
+    var cnt = DATA.videos.filter(function(v){ return v.category === c.name; }).length;
+    html += chipHtml(c.name, c.name, c.color, cnt);
+  });
+  box.innerHTML = html;
+}
+function chipHtml(key, label, color, cnt){
+  var active = currentCat === key;
+  var style = active ? ' style="background:' + (color || '#22301F') + '"' : '';
+  var dot = color && !active ? '<span class="dot" style="background:' + color + '"></span>' : (color ? '<span class="dot"></span>' : '');
+  return '<button class="chip' + (active ? ' active' : '') + '"' + style
+    + ' type="button" onclick="setCat(\'' + esc(key).replace(/'/g,"\\'") + '\')">'
+    + dot + esc(label) + ' <span class="cnt">' + cnt + '</span></button>';
+}
+function setCat(key){
+  currentCat = key;
+  renderChips();
+  render();
+}
+
+// ===== 렌더링 =====
+function render(){
+  renderChips();
+  var q = (document.getElementById('searchInput').value || '').trim().toLowerCase();
+  var sortMode = document.getElementById('sortSelect') ? document.getElementById('sortSelect').value : 'added';
+
+  var list = DATA.videos.slice();
+  if(currentCat !== 'all'){
+    list = list.filter(function(v){ return v.category === currentCat; });
+  }
+  if(q){
+    list = list.filter(function(v){
+      var hay = [v.title, v.channel, v.summary]
+        .concat((v.insights||[]))
+        .concat((v.timeline||[]).map(function(t){ return t.title + ' ' + (t.note||''); }))
+        .join(' ').toLowerCase();
+      return hay.indexOf(q) !== -1;
+    });
+  }
+  if(sortMode === 'date_desc'){
+    list.sort(function(a,b){ return parseDateVal(b.videoDate) - parseDateVal(a.videoDate); });
+  }else if(sortMode === 'date_asc'){
+    list.sort(function(a,b){ return parseDateVal(a.videoDate) - parseDateVal(b.videoDate); });
+  }
+
+  var label = currentCat === 'all' ? '전체' : currentCat;
+  document.getElementById('countText').textContent =
+    label + ' ' + list.length + '편' + (q ? ' · "' + q + '" 검색 결과' : '');
+
+  if(list.length === 0){
+    document.getElementById('videoList').innerHTML =
+      '<div class="empty-msg">' + (q ? '검색 결과가 없어요.' : '이 분야에는 아직 기록이 없어요.<br>위에서 첫 영상을 추가해보세요.') + '</div>';
+    return;
+  }
+
+  var html = '';
+  for(var idx=0; idx<list.length; idx++){
+    var v = list[idx];
+    var url = 'https://www.youtube.com/watch?v=' + v.id;
+    var color = catColor(v.category);
+    var tl = '';
+    for(var t of (v.timeline||[])){
+      var sec = t.time && t.time !== '—' ? tsToSeconds(t.time) : null;
+      var timeHtml = sec !== null
+        ? '<a href="' + esc(url) + '&t=' + sec + 's" target="_blank" rel="noopener">' + esc(t.time) + '</a>'
+        : esc(t.time || '—');
+      tl += '<li><div class="tl-time">' + timeHtml + '</div>'
+          + '<div class="tl-title">' + esc(t.title) + '</div>'
+          + (t.note ? '<div class="tl-note">' + esc(t.note) + '</div>' : '')
+          + '</li>';
+    }
+    var ins = '';
+    for(var i of (v.insights||[])){
+      ins += '<li><span class="hl">' + esc(i) + '</span></li>';
+    }
+    html += '<article class="video-card" style="border-top-color:' + color + '">'
+      + '<div class="card-body">'
+      + '<span class="cat-badge" style="background:' + color + '">' + esc(v.category || '미분류') + '</span>'
+      + '<h2 class="card-title">' + (v.epNum ? '<span class="ep-badge">#' + esc(v.epNum) + '</span> ' : '') + '<a href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(v.title) + '</a></h2>'
+      + '<div class="card-meta">'
+      + (v.channel ? '<span class="channel">' + esc(v.channel) + '</span> · ' : '')
+      + '영상 게시: ' + esc(v.videoDate||'미상')
+      + (v.titleNote ? ' · ' + esc(v.titleNote) : '')
+      + '</div>'
+      + (v.summary ? '<p class="card-summary">' + esc(v.summary) + '</p>' : '')
+      + '<div class="card-btns">'
+      + '<a class="watch-btn" href="' + esc(url) + '" target="_blank" rel="noopener" style="background:' + color + '">▶ 영상 보기</a>'
+      + '<button class="expand-btn" type="button" onclick="toggleDetail(this)">타임라인 · 인사이트 펼치기</button>'
+      + '</div>'
+      + '<div class="detail">'
+      + (tl ? '<div class="section-label">TIMELINE</div><ul class="timeline">' + tl + '</ul>' : '')
+      + (ins ? '<div class="section-label">INSIGHTS</div><ul class="insights">' + ins + '</ul>' : '')
+      + '<div class="card-manage">'
+      + '<button class="manage-btn" type="button" onclick="openEditForm(\'' + esc(v.id) + '\')">✎ 수정</button>'
+      + '<button class="manage-btn danger" type="button" onclick="deleteVideo(\'' + esc(v.id) + '\')">삭제</button>'
+      + '</div>'
+      + '</div></div></article>';
+  }
+  document.getElementById('videoList').innerHTML = html;
+}
+function toggleDetail(btn){
+  var d = btn.parentElement.nextElementSibling;
+  var open = d.classList.toggle('open');
+  btn.textContent = open ? '접기' : '타임라인 · 인사이트 펼치기';
+}
+
+// ===== 폼 =====
+var editingId = null;
+
+function fillCatSelect(selected){
+  var sel = document.getElementById('f-cat');
+  var html = '';
+  DATA.categories.forEach(function(c){
+    html += '<option value="' + esc(c.name) + '"' + (c.name === selected ? ' selected' : '') + '>' + esc(c.name) + '</option>';
+  });
+  html += '<option value="__new__">＋ 새 분야 만들기</option>';
+  sel.innerHTML = html;
+  onCatSelect();
+}
+function onCatSelect(){
+  var isNew = document.getElementById('f-cat').value === '__new__';
+  document.getElementById('newCatWrap').className = isNew ? 'show' : '';
+}
+
+function toggleAddForm(){
+  var f = document.getElementById('addForm');
+  var open = f.classList.toggle('open');
+  document.getElementById('addToggleBtn').textContent = open ? '－ 입력 폼 닫기' : '＋ 새 영상 추가하기';
+  if(open && document.getElementById('tl-rows').children.length === 0){
+    addTlRow(); addTlRow(); addTlRow();
+    addInsRow(); addInsRow(); addInsRow();
+  }
+  if(open && !editingId){
+    fillCatSelect(currentCat !== 'all' ? currentCat : (DATA.categories[0] ? DATA.categories[0].name : null));
+  }
+  if(!open){ cancelEdit(); }
+}
+
+function clearForm(){
+  document.getElementById('f-title').value = '';
+  document.getElementById('f-url').value = '';
+  document.getElementById('f-date').value = '';
+  document.getElementById('f-channel').value = '';
+  document.getElementById('f-summary').value = '';
+  document.getElementById('f-newcat').value = '';
+  document.getElementById('tl-rows').innerHTML = '';
+  document.getElementById('ins-rows').innerHTML = '';
+  addTlRow(); addTlRow(); addTlRow();
+  addInsRow(); addInsRow(); addInsRow();
+  fillCatSelect(currentCat !== 'all' ? currentCat : (DATA.categories[0] ? DATA.categories[0].name : null));
+}
+
+function openEditForm(id){
+  var v = DATA.videos.find(function(x){ return x.id === id; });
+  if(!v) return;
+  editingId = id;
+
+  document.getElementById('f-title').value = v.title || '';
+  document.getElementById('f-url').value = 'https://www.youtube.com/watch?v=' + v.id;
+  document.getElementById('f-date').value = v.videoDate || '';
+  document.getElementById('f-channel').value = v.channel || '';
+  document.getElementById('f-summary').value = v.summary || '';
+  fillCatSelect(v.category);
+
+  document.getElementById('tl-rows').innerHTML = '';
+  document.getElementById('ins-rows').innerHTML = '';
+  (v.timeline||[]).forEach(function(t){ addTlRow(t.time, t.title, t.note); });
+  (v.insights||[]).forEach(function(i){ addInsRow(i); });
+  if((v.timeline||[]).length === 0){ addTlRow(); addTlRow(); addTlRow(); }
+  if((v.insights||[]).length === 0){ addInsRow(); addInsRow(); addInsRow(); }
+
+  document.getElementById('submitBtn').textContent = '수정 내용 저장';
+  document.getElementById('cancelEditBtn').style.display = 'block';
+  setFormStatus('');
+
+  var f = document.getElementById('addForm');
+  if(!f.classList.contains('open')){
+    f.classList.add('open');
+    document.getElementById('addToggleBtn').textContent = '－ 입력 폼 닫기';
+  }
+  document.getElementById('addBox').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function cancelEdit(){
+  editingId = null;
+  document.getElementById('submitBtn').textContent = '이 영상 목록에 추가';
+  document.getElementById('cancelEditBtn').style.display = 'none';
+  clearForm();
+  setFormStatus('');
+}
+
+function deleteVideo(id){
+  var v = DATA.videos.find(function(x){ return x.id === id; });
+  if(!v) return;
+  if(!confirm('"' + v.title + '" 카드를 삭제할까요?')) return;
+  DATA.videos = DATA.videos.filter(function(x){ return x.id !== id; });
+  if(DELETED.indexOf(id) === -1) DELETED.push(id);
+  saveStore();
+  render();
+  toast('삭제했어요');
+}
+
+function addTlRow(time, title, note){
+  var wrap = document.createElement('div');
+  wrap.className = 'tl-row';
+  wrap.innerHTML =
+    '<input type="text" class="tl-time" placeholder="0:00">' +
+    '<div class="tl-fields">' +
+      '<input type="text" class="tl-title" placeholder="구간 제목">' +
+      '<input type="text" class="tl-note" placeholder="핵심 내용 한 줄 (선택)">' +
+      '<button class="row-remove" type="button" onclick="this.closest(\'.tl-row\').remove()">삭제</button>' +
+    '</div>';
+  document.getElementById('tl-rows').appendChild(wrap);
+  if(time) wrap.querySelector('.tl-time').value = time;
+  if(title) wrap.querySelector('.tl-title').value = title;
+  if(note) wrap.querySelector('.tl-note').value = note;
+}
+
+function addInsRow(text){
+  var wrap = document.createElement('div');
+  wrap.className = 'ins-row';
+  wrap.innerHTML =
+    '<input type="text" class="ins-text" placeholder="기억할 만한 인사이트 한 문장">' +
+    '<button class="row-remove" type="button" onclick="this.closest(\'.ins-row\').remove()">삭제</button>';
+  document.getElementById('ins-rows').appendChild(wrap);
+  if(text) wrap.querySelector('.ins-text').value = text;
+}
+
+function extractVideoId(url){
+  var patterns = [
+    /(?:youtube\.com\/watch\?[^#]*v=)([\w-]{11})/,
+    /(?:youtu\.be\/)([\w-]{11})/,
+    /(?:youtube\.com\/shorts\/)([\w-]{11})/,
+    /(?:youtube\.com\/live\/)([\w-]{11})/
+  ];
+  for(var i=0;i<patterns.length;i++){
+    var m = url.match(patterns[i]);
+    if(m) return m[1];
+  }
+  return null;
+}
+
+function setFormStatus(msg, isErr){
+  var el = document.getElementById('formStatus');
+  el.textContent = msg;
+  el.className = 'form-status' + (isErr ? ' err' : '');
+}
+
+function resolveCategory(){
+  var sel = document.getElementById('f-cat').value;
+  if(sel !== '__new__') return sel;
+  var name = document.getElementById('f-newcat').value.trim();
+  if(!name) return null;
+  if(!DATA.categories.some(function(c){ return c.name === name; })){
+    DATA.categories.push({ name: name, color: nextColor() });
+  }
+  return name;
+}
+
+function submitVideo(){
+  var title = document.getElementById('f-title').value.trim();
+  var url = document.getElementById('f-url').value.trim();
+  var date = document.getElementById('f-date').value.trim();
+  var channel = document.getElementById('f-channel').value.trim();
+  var summary = document.getElementById('f-summary').value.trim();
+
+  if(!title){ setFormStatus('영상 제목을 입력해주세요.', true); return; }
+  var vid = extractVideoId(url);
+  if(!vid){ setFormStatus('유튜브 링크 형식을 확인해주세요.', true); return; }
+  if(!editingId && DATA.videos.some(function(v){ return v.id === vid; })){ setFormStatus('이미 목록에 있는 영상이에요.', true); return; }
+
+  var category = resolveCategory();
+  if(!category){ setFormStatus('분야를 선택하거나 새 분야 이름을 입력해주세요.', true); return; }
+
+  var timeline = [];
+  document.querySelectorAll('#tl-rows .tl-row').forEach(function(row){
+    var time = row.querySelector('.tl-time').value.trim();
+    var t = row.querySelector('.tl-title').value.trim();
+    var note = row.querySelector('.tl-note').value.trim();
+    if(t){ timeline.push({ time: time || '—', title: t, note: note }); }
+  });
+
+  var insights = [];
+  document.querySelectorAll('#ins-rows .ins-text').forEach(function(inp){
+    var v = inp.value.trim();
+    if(v) insights.push(v);
+  });
+
+  var today = new Date();
+  var addedAt = today.getFullYear() + '.' + String(today.getMonth()+1).padStart(2,'0') + '.' + String(today.getDate()).padStart(2,'0');
+
+  if(editingId){
+    var idx = DATA.videos.findIndex(function(v){ return v.id === editingId; });
+    if(idx === -1){ setFormStatus('수정할 카드를 찾지 못했어요.', true); return; }
+    var prev = DATA.videos[idx];
+    DATA.videos[idx] = {
+      id: vid,
+      epNum: prev.epNum,
+      titleNote: prev.titleNote,
+      title: title,
+      channel: channel,
+      category: category,
+      videoDate: date,
+      addedAt: prev.addedAt || addedAt,
+      summary: summary,
+      timeline: timeline,
+      insights: insights
+    };
+    render();
+    cancelEdit();
+    setFormStatus('✓ 수정 내용이 저장됐어요!');
+  }else{
+    DATA.videos.unshift({
+      id: vid,
+      title: title,
+      channel: channel,
+      category: category,
+      videoDate: date,
+      addedAt: addedAt,
+      summary: summary,
+      timeline: timeline,
+      insights: insights
+    });
+    render();
+    clearForm();
+    setFormStatus('✓ 목록에 추가됐어요!');
+  }
+
+  DELETED = DELETED.filter(function(x){ return x !== vid; });
+  saveStore();
+  window.scrollTo({ top: document.getElementById('videoList').offsetTop - 20, behavior: 'smooth' });
+}
+
+// ===== 백업 · 가져오기 =====
+function toggleAdmin(){
+  var b = document.getElementById('adminBody');
+  var open = b.classList.toggle('open');
+  document.getElementById('adminToggle').textContent = open ? '－ 백업 · 가져오기 닫기' : '⚙ 백업 · 가져오기';
+}
+function backupText(){
+  return JSON.stringify({ categories: DATA.categories, videos: DATA.videos }, null, 2);
+}
+function exportBackup(){
+  var blob = new Blob([backupText()], { type: 'application/json;charset=utf-8' });
+  var a = document.createElement('a');
+  var d = new Date();
+  var stamp = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+  a.href = URL.createObjectURL(blob);
+  a.download = '밑줄-아카이브-백업-' + stamp + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  toast('백업 파일을 저장했어요');
+}
+function copyBackup(){
+  var text = backupText();
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){ toast('백업 내용을 복사했어요'); },
+      function(){ fallbackCopy(text); });
+  }else{ fallbackCopy(text); }
+}
+function fallbackCopy(text){
+  var ta = document.getElementById('importText');
+  ta.value = text; ta.focus(); ta.select();
+  try{ document.execCommand('copy'); toast('백업 내용을 복사했어요'); }
+  catch(e){ toast('아래 칸의 내용을 직접 복사해주세요'); }
+}
+
+function importData(parsed){
+  var cats = [], vids = [];
+  if(Array.isArray(parsed)){ vids = parsed; }
+  else if(parsed && Array.isArray(parsed.videos)){ vids = parsed.videos; cats = parsed.categories || []; }
+  else if(parsed && parsed.id && parsed.title){ vids = [parsed]; }
+  else { throw new Error('형식을 알아볼 수 없어요'); }
+
+  cats.forEach(function(c){
+    if(c && c.name && !DATA.categories.some(function(x){ return x.name === c.name; })){
+      DATA.categories.push({ name: c.name, color: c.color || nextColor() });
+    }
+  });
+
+  var added = 0, updated = 0;
+  vids.forEach(function(v){
+    if(!v || !v.id || !v.title) return;
+    v.category = v.category || '미분류';
+    if(!DATA.categories.some(function(x){ return x.name === v.category; })){
+      DATA.categories.push({ name: v.category, color: nextColor() });
+    }
+    v.timeline = v.timeline || [];
+    v.insights = v.insights || [];
+    DELETED = DELETED.filter(function(x){ return x !== v.id; });
+    var idx = DATA.videos.findIndex(function(x){ return x.id === v.id; });
+    if(idx === -1){ DATA.videos.unshift(v); added++; }
+    else { DATA.videos[idx] = v; updated++; }
+  });
+  saveStore();
+  render();
+  return { added: added, updated: updated };
+}
+function importFromText(){
+  var el = document.getElementById('importText');
+  var txt = el.value.trim();
+  if(!txt){ toast('붙여넣은 내용이 없어요'); return; }
+  try{
+    var r = importData(JSON.parse(txt));
+    el.value = '';
+    toast('추가 ' + r.added + '편 · 갱신 ' + r.updated + '편');
+  }catch(e){ toast('가져오기 실패: ' + e.message); }
+}
+function importFromFile(input){
+  var f = input.files && input.files[0];
+  if(!f) return;
+  var reader = new FileReader();
+  reader.onload = function(){
+    try{
+      var r = importData(JSON.parse(reader.result));
+      toast('추가 ' + r.added + '편 · 갱신 ' + r.updated + '편');
+    }catch(e){ toast('가져오기 실패: ' + e.message); }
+    input.value = '';
+  };
+  reader.readAsText(f);
+}
+
+// ===== 앱 설치 안내 =====
+var deferredPrompt = null;
+function isStandalone(){
+  return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+}
+function installDismissed(){
+  try{ return localStorage.getItem('underline-install-dismissed') === '1'; }catch(e){ return false; }
+}
+function dismissInstall(){
+  try{ localStorage.setItem('underline-install-dismissed', '1'); }catch(e){}
+  document.getElementById('installBanner').style.display = 'none';
+}
+function showInstall(kind){
+  if(isStandalone() || installDismissed()) return;
+  var box = document.getElementById('installBanner');
+  var text = document.getElementById('installText');
+  var btns = document.getElementById('installBtns');
+  if(kind === 'ios'){
+    text.innerHTML = '<b>홈 화면에 앱처럼 추가해보세요.</b><br>Safari 하단의 공유 버튼(□↑)을 누르고 <b>"홈 화면에 추가"</b>를 선택하면 돼요.';
+    btns.innerHTML = '<button class="ghost" type="button" onclick="dismissInstall()">닫기</button>';
+  }else{
+    text.innerHTML = '<b>앱으로 설치할 수 있어요.</b><br>홈 화면에 아이콘이 생기고, 인터넷이 없어도 열려요.';
+    btns.innerHTML = '<button type="button" onclick="doInstall()">설치하기</button><button class="ghost" type="button" onclick="dismissInstall()">나중에</button>';
+  }
+  box.style.display = 'block';
+}
+function doInstall(){
+  if(!deferredPrompt) return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(function(){ deferredPrompt = null; document.getElementById('installBanner').style.display = 'none'; });
+}
+window.addEventListener('beforeinstallprompt', function(e){
+  e.preventDefault();
+  deferredPrompt = e;
+  showInstall('android');
+});
+window.addEventListener('appinstalled', function(){
+  document.getElementById('installBanner').style.display = 'none';
+  toast('설치 완료! 홈 화면에서 열어보세요');
+});
+(function(){
+  var ua = navigator.userAgent || '';
+  var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+  if(isIOS) showInstall('ios');
+})();
+
+// ===== 서비스워커 (오프라인 지원) =====
+if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  });
+}
+
+render();
+</script>
+</body>
+</html>
